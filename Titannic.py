@@ -8,6 +8,7 @@ import sklearn.preprocessing as preprocessing
 from sklearn import linear_model
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import learning_curve
 # plt.rcParams['font.sans-serif']=['SimHei'] #用来正常显示中文标签
 # plt.rcParams['axes.unicode_minus']=False #用来正常显示负号
 
@@ -129,6 +130,55 @@ data_train = pd.read_csv("/home/baitong/Data/all/train.csv")
 # plt.xlabel(u"dose have Cabin") 
 # plt.ylabel(u"Num")
 # plt.show()
+# 用sklearn的learning_curve得到training_score和cv_score，使用matplotlib画出learning curve
+def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=1, 
+                        train_sizes=np.linspace(.05, 1., 20), verbose=0, plot=True):
+    """
+    画出data在某模型上的learning curve.
+    参数解释
+    ----------
+    estimator : 你用的分类器。
+    title : 表格的标题。
+    X : 输入的feature，numpy类型
+    y : 输入的target vector
+    ylim : tuple格式的(ymin, ymax), 设定图像中纵坐标的最低点和最高点
+    cv : 做cross-validation的时候，数据分成的份数，其中一份作为cv集，其余n-1份作为training(默认为3份)
+    n_jobs : 并行的的任务数(默认1)
+    """
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes, verbose=verbose)
+
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+
+    if plot:
+        plt.figure()
+        plt.title(title)
+        if ylim is not None:
+            plt.ylim(*ylim)
+        plt.xlabel(u"TarinNum")
+        plt.ylabel(u"Score")
+        plt.gca().invert_yaxis()
+        plt.grid()
+
+        plt.fill_between(train_sizes, train_scores_mean - train_scores_std, train_scores_mean + train_scores_std, 
+                         alpha=0.1, color="b")
+        plt.fill_between(train_sizes, test_scores_mean - test_scores_std, test_scores_mean + test_scores_std, 
+                         alpha=0.1, color="r")
+        plt.plot(train_sizes, train_scores_mean, 'o-', color="b", label=u"TrainScore")
+        plt.plot(train_sizes, test_scores_mean, 'o-', color="r", label=u"validationScore")
+
+        plt.legend(loc="best")
+
+        plt.draw()
+        plt.show()
+        plt.gca().invert_yaxis()
+
+    midpoint = ((train_scores_mean[-1] + train_scores_std[-1]) + (test_scores_mean[-1] - test_scores_std[-1])) / 2
+    diff = (train_scores_mean[-1] + train_scores_std[-1]) - (test_scores_mean[-1] - test_scores_std[-1])
+    return midpoint, diff
 ### 使用 RandomForestClassifier 填补缺失的年龄属性
 def set_missing_ages(df):
 
@@ -192,67 +242,68 @@ df['Fare_scaled'] = scaler.fit_transform(df[['Fare']], fare_scale_param)
 # print("df['Fare_scaled']")
 # print(df['Fare_scaled'][:5])
 # 用正则取出我们要的属性值
-# train_df = df.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Embarked_.*|Sex_.*|Pclass_.*')
-# train_np = train_df.values
-# # y即Survival结果
-# y = train_np[:, 0]
-# # X即特征属性值
-# X = train_np[:, 1:]
-# fit到RandomForestRegressor之中
-# clf = linear_model.LogisticRegression(C=1.0, penalty='l1', tol=1e-6)
-# clf.fit(X, y)
+train_df = df.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Sex_.*|Pclass_.*')
+train_np = train_df.values
+# y即Survival结果
+y = train_np[:, 0]
+# X即特征属性值
+X = train_np[:, 1:]
+##fit到RandomForestRegressor之中
+clf = linear_model.LogisticRegression(C=1.0, penalty='l1', tol=1e-6)
+clf.fit(X, y)
 
 ###############################################################
 #处理test数据
 ############################################################
-# data_test = pd.read_csv("/home/baitong/Data/all/test.csv")
-# data_test.loc[ (data_test.Fare.isnull()), 'Fare' ] = 0
-# # 接着我们对test_data做和train_data中一致的特征变换
-# # 首先用同样的RandomForestRegressor模型填上丢失的年龄
-# tmp_df = data_test[['Age','Fare', 'Parch', 'SibSp', 'Pclass']]
-# null_age = tmp_df[data_test.Age.isnull()].values
-# # 根据特征属性X预测年龄并补上
-# X = null_age[:, 1:]
-# predictedAges = rfr.predict(X)
-# data_test.loc[ (data_test.Age.isnull()), 'Age' ] = predictedAges
+data_test = pd.read_csv("/home/baitong/Data/all/test.csv")
+data_test.loc[ (data_test.Fare.isnull()), 'Fare' ] = 0
+# 接着我们对test_data做和train_data中一致的特征变换
+# 首先用同样的RandomForestRegressor模型填上丢失的年龄
+tmp_df = data_test[['Age','Fare', 'Parch', 'SibSp', 'Pclass']]
+null_age = tmp_df[data_test.Age.isnull()].values
+# 根据特征属性X预测年龄并补上
+X = null_age[:, 1:]
+predictedAges = rfr.predict(X)
+data_test.loc[ (data_test.Age.isnull()), 'Age' ] = predictedAges
 
-# data_test = set_Cabin_type(data_test)
-# dummies_Cabin = pd.get_dummies(data_test['Cabin'], prefix= 'Cabin')
-# dummies_Embarked = pd.get_dummies(data_test['Embarked'], prefix= 'Embarked')
-# dummies_Sex = pd.get_dummies(data_test['Sex'], prefix= 'Sex')
-# dummies_Pclass = pd.get_dummies(data_test['Pclass'], prefix= 'Pclass')
+data_test = set_Cabin_type(data_test)
+dummies_Cabin = pd.get_dummies(data_test['Cabin'], prefix= 'Cabin')
+dummies_Embarked = pd.get_dummies(data_test['Embarked'], prefix= 'Embarked')
+dummies_Sex = pd.get_dummies(data_test['Sex'], prefix= 'Sex')
+dummies_Pclass = pd.get_dummies(data_test['Pclass'], prefix= 'Pclass')
 
 
-# df_test = pd.concat([data_test, dummies_Cabin, dummies_Embarked, dummies_Sex, dummies_Pclass], axis=1)
-# df_test.drop(['Pclass', 'Name', 'Sex', 'Ticket', 'Cabin', 'Embarked'], axis=1, inplace=True)
-# df_test['Age_scaled'] = scaler.fit_transform(df_test[['Age']], age_scale_param)
-# df_test['Fare_scaled'] = scaler.fit_transform(df_test[['Fare']], fare_scale_param)
+df_test = pd.concat([data_test, dummies_Cabin, dummies_Embarked, dummies_Sex, dummies_Pclass], axis=1)
+df_test.drop(['Pclass', 'Name', 'Sex', 'Ticket', 'Cabin', 'Embarked'], axis=1, inplace=True)
+df_test['Age_scaled'] = scaler.fit_transform(df_test[['Age']], age_scale_param)
+df_test['Fare_scaled'] = scaler.fit_transform(df_test[['Fare']], fare_scale_param)
 ####################test##########################
-# test = df_test.filter(regex='Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Embarked_.*|Sex_.*|Pclass_.*')
-# predictions = clf.predict(test)
-# result = pd.DataFrame({'PassengerId':data_test['PassengerId'].values, 'Survived':predictions.astype(np.int32)})
-# result.to_csv("/home/baitong/pywork/Titannic_Machine_Learnning/logistic_regression_predictions.csv", index=False)
+test = df_test.filter(regex='Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Sex_.*|Pclass_.*')
+predictions = clf.predict(test)
+result = pd.DataFrame({'PassengerId':data_test['PassengerId'].values, 'Survived':predictions.astype(np.int32)})
+result.to_csv("/home/baitong/pywork/Titannic_Machine_Learnning/logistic_regression_predictions.csv", index=False)
 
-######查看第一次训练后的参数####
+# ######查看第一次训练后的参数####
 # print(pd.DataFrame({"columns":list(train_df.columns)[1:], "coef":list(clf.coef_.T)}))
- #简单看看打分情况
-# clf = linear_model.LogisticRegression(C=1.0, penalty='l1', tol=1e-6)
-# all_data = df.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Embarked_.*|Sex_.*|Pclass_.*')
-# X = all_data.values[:,1:]
-# y = all_data.values[:,0]
-# print(cross_val_score(clf, X, y, cv=5))
+#  ##简单看看打分情况
+clf = linear_model.LogisticRegression(C=1.0, penalty='l1', tol=1e-6)
+all_data = df.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Sex_.*|Pclass_.*')
+X = all_data.values[:,1:]
+y = all_data.values[:,0]
+print(cross_val_score(clf, X, y, cv=5))
 # 分割数据，按照 训练数据:cv数据 = 7:3的比例
 split_train, split_cv = train_test_split(df, test_size=0.3, random_state=0)
-train_df = split_train.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Embarked_.*|Sex_.*|Pclass_.*')
+train_df = split_train.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Sex_.*|Pclass_.*')
 # 生成模型
 clf = linear_model.LogisticRegression(C=1.0, penalty='l1', tol=1e-6)
 clf.fit(train_df.values[:,1:], train_df.values[:,0])
 
 # 对cross validation数据进行预测
 
-cv_df = split_cv.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Embarked_.*|Sex_.*|Pclass_.*')
+cv_df = split_cv.filter(regex='Survived|Age_.*|SibSp|Parch|Fare_.*|Cabin_.*|Sex_.*|Pclass_.*')
 predictions = clf.predict(cv_df.values[:,1:])
 origin_data_train = pd.read_csv("/home/baitong/Data/all/train.csv")
 bad_cases = origin_data_train.loc[origin_data_train['PassengerId'].isin(split_cv[predictions != cv_df.values[:,0]]['PassengerId'].values)]
 bad_cases.to_csv("/home/baitong/pywork/Titannic_Machine_Learnning/bad_cases.csv", index=False)
 print(pd.DataFrame({"columns":list(cv_df.columns)[1:], "coef":list(clf.coef_.T)}))
+plot_learning_curve(clf, u"learning_curve", X, y)
